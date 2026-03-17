@@ -56,11 +56,22 @@ MINIMUM_JWT_SECRET_LENGTH = 32
 
 
 def validate_config():
-    env = os.getenv("APP_ENV", "development").lower()
+    env = settings.APP_ENV.lower()
     errors = []
     warnings = []
 
-    # Check required variables
+    # Log which config file is being used
+    env_file = settings.model_config.get("env_file")
+    if env_file and os.path.exists(env_file):
+        logger.info(f"  ✓ Loaded config from {os.path.abspath(env_file)}")
+    else:
+        logger.warning(f"  ⚠ Config file {env_file} not found in {os.getcwd()}")
+
+    # Masked MongoDB URL check
+    mongo_url = settings.MONGODB_URL
+    if mongo_url:
+        masked_url = mongo_url.split("@")[-1] if "@" in mongo_url else mongo_url
+        logger.info(f"  ✓ MongoDB Target: ...@{masked_url}")
     for var, desc in REQUIRED_IN_PRODUCTION:
         val = getattr(settings, var, "")
         if not val or val == "change_this_in_production":
