@@ -1,0 +1,473 @@
+#!/usr/bin/env python3
+"""
+PayrollOS CLI — manage your payroll system from the terminal.
+
+Usage:
+    payrollos login
+    payrollos employees list
+    payrollos employees add
+    payrollos payroll preview --period-start 2026-03-01 --period-end 2026-03-15
+    payrollos payroll run     --period-start 2026-03-01 --period-end 2026-03-15
+    payrollos payroll history
+    payrollos paystubs list
+    payrollos paystubs download <paystub-id>
+    payrollos reports ytd
+    payrollos reports tax-liability
+    payrollos pto requests
+    payrollos export employees
+    payrollos export ytd
+    payrollos health
+
+Install:
+    pip install click requests tabulate
+    chmod +x cli/payrollos
+    ln -s $(pwd)/cli/payrollos /usr/local/bin/payrollos
+"""
+import os
+import sys
+import json
+import configparser
+from pathlib import Path
+
+try:
+    import click
+    import requests
+    from tabulate import tabulate
+except ImportError:
+    print("Install dependencies: pip install click requests tabulate")
+    sys.exit(1)
+
+CONFIG_DIR = Path.home() / ".payrollos"
+CONFIG_FILE = CONFIG_DIR / "config.ini"
+TOKEN_FILE = CONFIG_DIR / "token"
+
+DEFAULT_API = os.getenv("PAYROLLOS_API_URL", "http://localhost:8000")
+
+
+# ── Config helpers ─────────────────────────────────────────────
+def get_config():
+    cfg = configparser.ConfigParser()
+    if CONFIG_FILE.exists():
+        cfg.read(CONFIG_FILE)
+    return cfg
+
+
+def get_token():
+    if TOKEN_FILE.exists():
+        return TOKEN_FILE.read_text().strip()
+    return os.getenv("PAYROLLOS_TOKEN", "")
+
+
+def save_token(token: str):
+    CONFIG_DIR.mkdir(exist_ok=True)
+    TOKEN_FILE.write_text(token)
+    TOKEN_FILE.chmod(0o600)
+
+
+def get_api_url():
+    cfg = get_config()
+    return cfg.get("api", "url", fallback=DEFAULT_API)
+
+
+def api(method: str, path: str, json_data=None, params=None, stream=False):
+    url = f"{get_api_url()}{path}"
+    token = get_token()
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    resp = requests.request(method, url, json=json_data, params=params,
+                            headers=headers, stream=stream, timeout=30)
+    if resp.status_code == 401:
+        click.echo("❌ Not authenticated. Run: payrollos login", err=True)
+        sys.exit(1)
+    if resp.status_code >= 400 and not stream:
+        try:
+            detail = resp.json().get("detail", resp.text)
+        except Exception:
+            detail = resp.text
+        click.echo(f"❌ Error {resp.status_code}: {detail}", err=True)
+        sys.exit(1)
+    return resp
+
+
+def fmt_money(n):
+    return f"${float(n or 0):>12,.2f}"
+
+
+def fmt_table(rows, headers):
+    click.echo(tabulate(rows, headers=headers, tablefmt="rounded_outline"))
+
+
+# ── CLI root ───────────────────────────────────────────────────
+@click.group()
+@click.version_option("1.0.0", prog_name="payrollos")
+def cli():
+    """PayrollOS command-line interface."""
+    pass
+
+
+# ── Login ──────────────────────────────────────────────────────
+@cli.command()
+@click.option("--url", default=None, help="API base URL")
+def login(url):
+    """Authenticate and save credentials."""
+    if url:
+        CONFIG_DIR.mkdir(exist_ok=True)
+        cfg = get_config()
+        if "api" not in cfg:
+            cfg["api"] = {}
+        cfg["api"]["url"] = url
+        with open(CONFIG_FILE, "w") as f:
+            cfg.write(f)
+
+    email = click.prompt("Email")
+    password = click.prompt("Password", hide_input=True)
+
+    try:
+        resp = requests.post(
+            f"{get_api_url()}/auth/login",
+            json={"email": email, "password": password},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            click.echo(f"❌ Login failed: {resp.json().get('detail', 'Unknown error')}")
+            sys.exit(1)
+        data = resp.json()
+        save_token(data["access_token"])
+        user = data["user"]
+        click.echo(f"✅ Logged in as {user['email']} ({user['role']})")
+    except requests.exceptions.ConnectionError:
+        click.echo(f"❌ Cannot connect to {get_api_url()}")
+        sys.exit(1)
+
+
+@cli.command()
+def logout():
+    """Remove saved credentials."""
+    if TOKEN_FILE.exists():
+        TOKEN_FILE.unlink()
+    click.echo("✅ Logged out")
+
+
+# ── Employees ──────────────────────────────────────────────────
+@cli.group()
+def employees():
+    """Manage employees."""
+    pass
+
+
+@employees.command("list")
+@click.option("--status", default="active", help="Filter by status")
+@click.option("--search", default="", help="Search by name/email")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def employees_list(status, search, as_json):
+    """List all employees."""
+    params = {}
+    if status:
+        params["status"] = status
+    if search:
+        params["search"] = search
+    data = api("GET", "/employees", params=params).json()
+    emps = data.get("employees", [])
+
+    if as_json:
+        click.echo(json.dumps(emps, indent=2))
+        return
+
+    click.echo(f"\n  {len(emps)} employees ({status})\n")
+    rows = [
+        (
+            e["full_name"],
+            e.get("job_title", ""),
+            e.get("department", ""),
+            e["pay_type"],
+            fmt_money(e["pay_rate"]),
+            e["status"],
+        )
+        for e in emps
+    ]
+    fmt_table(rows, ["Name", "Title", "Department", "Pay type", "Rate", "Status"])
+
+
+@employees.command("show")
+@click.argument("employee_id")
+def employees_show(employee_id):
+    """Show employee details."""
+    emp = api("GET", f"/employees/{employee_id}").json()
+    for k, v in emp.items():
+        if v is not None:
+            click.echo(f"  {k:<35} {v}")
+
+
+@employees.command("add")
+def employees_add():
+    """Interactively add a new employee."""
+    click.echo("\n  Add new employee\n")
+    data = {
+        "first_name": click.prompt("  First name"),
+        "last_name": click.prompt("  Last name"),
+        "email": click.prompt("  Email", default=""),
+        "hire_date": click.prompt("  Hire date (YYYY-MM-DD)"),
+        "pay_type": click.prompt("  Pay type", default="salary",
+                                  type=click.Choice(["salary", "hourly", "contract"])),
+        "pay_rate": float(click.prompt("  Pay rate (annual salary or hourly rate)")),
+        "department": click.prompt("  Department", default=""),
+        "job_title": click.prompt("  Job title", default=""),
+        "state_code": click.prompt("  State", default="NY"),
+        "filing_status": click.prompt("  Filing status", default="single",
+                                       type=click.Choice(["single", "married", "head_of_household"])),
+    }
+    emp = api("POST", "/employees", json_data=data).json()
+    click.echo(f"\n  ✅ Created {emp['full_name']} (ID: {emp['id'][:8]}…)")
+
+
+# ── Payroll ────────────────────────────────────────────────────
+@cli.group()
+def payroll():
+    """Run and manage payroll."""
+    pass
+
+
+@payroll.command("preview")
+@click.option("--period-start", required=True, help="YYYY-MM-DD")
+@click.option("--period-end", required=True, help="YYYY-MM-DD")
+def payroll_preview(period_start, period_end):
+    """Preview payroll for a pay period."""
+    data = api("POST", "/payroll/preview", json_data={
+        "period_start": period_start,
+        "period_end": period_end,
+    }).json()
+
+    click.echo(f"\n  Payroll preview  {period_start} – {period_end}\n")
+    t = data["totals"]
+    click.echo(f"  Employees:    {data['employee_count']}")
+    click.echo(f"  Gross:       {fmt_money(t['gross'])}")
+    click.echo(f"  Emp taxes:   {fmt_money(t['employee_taxes'])}")
+    click.echo(f"  Deductions:  {fmt_money(t['deductions'])}")
+    click.echo(f"  Net pay:     {fmt_money(t['net'])}")
+
+    click.echo()
+    rows = [
+        (
+            item["employee_name"],
+            fmt_money(item["gross_pay"]),
+            fmt_money(item["total_employee_taxes"]),
+            fmt_money(item["net_pay"]),
+        )
+        for item in data.get("items", [])
+    ]
+    fmt_table(rows, ["Employee", "Gross", "Taxes", "Net"])
+
+
+@payroll.command("run")
+@click.option("--period-start", required=True, help="YYYY-MM-DD")
+@click.option("--period-end", required=True, help="YYYY-MM-DD")
+@click.option("--pay-date", default=None, help="YYYY-MM-DD (defaults to period-end + 5 days)")
+@click.option("--yes", is_flag=True, help="Skip confirmation prompt")
+def payroll_run(period_start, period_end, pay_date, yes):
+    """Run payroll for a pay period."""
+    if not yes:
+        click.confirm(f"  Run payroll for {period_start} – {period_end}?", abort=True)
+
+    click.echo("  Running payroll…")
+    payload = {"period_start": period_start, "period_end": period_end}
+    if pay_date:
+        payload["pay_date"] = pay_date
+
+    data = api("POST", "/payroll/run", json_data=payload).json()
+    click.echo(f"\n  ✅ Payroll complete!")
+    click.echo(f"  Pay run ID:  {data['pay_run_id'][:8]}…")
+    click.echo(f"  Employees:   {data['employee_count']}")
+    t = data["totals"]
+    click.echo(f"  Gross:      {fmt_money(t['gross'])}")
+    click.echo(f"  Net paid:   {fmt_money(t['net'])}")
+    click.echo(f"  Emp taxes:  {fmt_money(t['employee_taxes'])}")
+    click.echo(f"  Er taxes:   {fmt_money(t['employer_taxes'])}")
+
+
+@payroll.command("history")
+@click.option("--limit", default=10)
+def payroll_history(limit):
+    """Show recent payroll runs."""
+    data = api("GET", f"/payroll/history?limit={limit}").json()
+    runs = data.get("runs", [])
+    click.echo(f"\n  {data.get('total', 0)} total runs\n")
+    rows = [
+        (
+            r["id"][:8] + "…",
+            r["created_at"][:10],
+            r["employee_count"],
+            fmt_money(r["total_gross"]),
+            fmt_money(r["total_net"]),
+            r["status"],
+        )
+        for r in runs
+    ]
+    fmt_table(rows, ["Run ID", "Date", "Emp", "Gross", "Net", "Status"])
+
+
+# ── Reports ────────────────────────────────────────────────────
+@cli.group()
+def reports():
+    """Payroll reports."""
+    pass
+
+
+@reports.command("ytd")
+@click.option("--year", default=None, type=int)
+def reports_ytd(year):
+    """Year-to-date summary."""
+    url = f"/reports/ytd-summary{f'?year={year}' if year else ''}"
+    data = api("GET", url).json()
+    click.echo(f"\n  YTD Summary — {data['year']}\n")
+    click.echo(f"  Pay runs:        {data['run_count']}")
+    click.echo(f"  Gross wages:    {fmt_money(data['total_gross'])}")
+    click.echo(f"  Employee taxes: {fmt_money(data['total_employee_taxes'])}")
+    click.echo(f"  Employer taxes: {fmt_money(data['total_employer_taxes'])}")
+    click.echo(f"  Net paid:       {fmt_money(data['total_net'])}")
+    click.echo(f"  True cost:      {fmt_money(data['true_total_cost'])}")
+    click.echo(f"  Eff tax rate:   {data['effective_tax_rate']}%")
+
+
+@reports.command("tax-liability")
+@click.option("--year", default=None, type=int)
+def reports_tax(year):
+    """Tax liability report."""
+    url = f"/reports/tax-liability{f'?year={year}' if year else ''}"
+    data = api("GET", url).json()
+    click.echo(f"\n  Tax Liability — {data['year']}\n")
+    irs = data["irs_941_liability"]
+    click.echo(f"  IRS 941 deposit:  {fmt_money(irs['total_941_deposit'])}")
+    click.echo(f"  IRS 940 FUTA:     {fmt_money(data['irs_940_futa'])}")
+    click.echo(f"  State withheld:   {fmt_money(data['state_income_tax_withheld'])}")
+    click.echo(f"  Total liability:  {fmt_money(data['total_tax_liability'])}")
+
+
+# ── Health ─────────────────────────────────────────────────────
+@cli.command()
+@click.option("--detailed", is_flag=True)
+def health(detailed):
+    """Check API health."""
+    path = "/health/detailed" if detailed else "/health"
+    try:
+        data = api("GET", path).json()
+    except SystemExit:
+        click.echo("❌ API unreachable")
+        return
+
+    status_emoji = "✅" if data.get("status") in ("ok", "healthy", "ready") else "⚠️"
+    click.echo(f"\n  {status_emoji} {data.get('service', 'PayrollOS')} — {data.get('status', 'unknown')}")
+
+    if detailed:
+        click.echo(f"  Version: {data.get('version')}")
+        click.echo(f"  Uptime:  {data.get('uptime')}")
+        for name, check in data.get("checks", {}).items():
+            emoji = "✅" if check.get("status") == "ok" else "⚠️"
+            details = ", ".join(f"{k}={v}" for k, v in check.items() if k != "status")
+            click.echo(f"  {emoji} {name:<20} {details}")
+
+
+# ── Export ─────────────────────────────────────────────────────
+@cli.group()
+def export():
+    """Export data as CSV."""
+    pass
+
+
+@export.command("employees")
+@click.option("--output", "-o", default="employees.csv")
+def export_employees(output):
+    """Export employee roster to CSV."""
+    resp = api("GET", "/export/employees", stream=True)
+    with open(output, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=8192):
+            f.write(chunk)
+    click.echo(f"✅ Saved to {output}")
+
+
+@export.command("ytd")
+@click.option("--year", default=None, type=int)
+@click.option("--output", "-o", default=None)
+def export_ytd(year, output):
+    """Export YTD employee data to CSV."""
+    year = year or __import__("datetime").date.today().year
+    output = output or f"employee-ytd-{year}.csv"
+    resp = api("GET", f"/export/employee-ytd?year={year}", stream=True)
+    with open(output, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=8192):
+            f.write(chunk)
+    click.echo(f"✅ Saved to {output}")
+
+
+# ── Paystubs ───────────────────────────────────────────────────
+@cli.group()
+def paystubs():
+    """View and download paystubs."""
+    pass
+
+
+@paystubs.command("list")
+@click.option("--employee-id", default=None)
+def paystubs_list(employee_id):
+    """List recent paystubs."""
+    params = {}
+    if employee_id:
+        params["employee_id"] = employee_id
+    data = api("GET", "/paystubs", params=params).json()
+    rows = [
+        (s["id"][:8] + "…", s["employee_id"][:8] + "…", s["created_at"][:10])
+        for s in data
+    ]
+    fmt_table(rows, ["Paystub ID", "Employee", "Date"])
+
+
+@paystubs.command("download")
+@click.argument("paystub_id")
+@click.option("--output", "-o", default=None)
+def paystubs_download(paystub_id, output):
+    """Download a paystub PDF."""
+    output = output or f"paystub-{paystub_id[:8]}.pdf"
+    resp = api("GET", f"/paystubs/{paystub_id}/download", stream=True)
+    with open(output, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=8192):
+            f.write(chunk)
+    click.echo(f"✅ Saved to {output}")
+
+
+# ── Calculator ─────────────────────────────────────────────────
+@cli.command()
+@click.option("--salary", default=None, type=float, help="Annual salary")
+@click.option("--hourly", default=None, type=float, help="Hourly rate")
+@click.option("--state", default="NY", help="State code")
+@click.option("--filing", default="single",
+              type=click.Choice(["single", "married", "head_of_household"]))
+@click.option("--frequency", default="biweekly",
+              type=click.Choice(["weekly", "biweekly", "semimonthly", "monthly"]))
+def calculate(salary, hourly, state, filing, frequency):
+    """Calculate net paycheck."""
+    if not salary and not hourly:
+        click.echo("Provide --salary or --hourly")
+        sys.exit(1)
+
+    payload = {
+        "pay_type": "salary" if salary else "hourly",
+        "annual_salary": salary,
+        "hourly_rate": hourly,
+        "state_code": state,
+        "filing_status": filing,
+        "pay_frequency": frequency,
+    }
+    data = api("POST", "/payroll/calculate", json_data=payload).json()
+
+    click.echo(f"\n  Paycheck calculator  [{frequency} · {filing} · {state}]\n")
+    click.echo(f"  Gross pay:        {fmt_money(data['gross_pay'])}")
+    click.echo(f"  Pre-tax deductions{fmt_money(data['pretax_deductions'])}")
+    click.echo(f"  Federal tax:      {fmt_money(data['federal_income_tax'])}  ({data['effective_federal_rate']}%)")
+    click.echo(f"  State tax:        {fmt_money(data['state_income_tax'])}  ({data['effective_state_rate']}%)")
+    click.echo(f"  Social security:  {fmt_money(data['social_security_tax'])}")
+    click.echo(f"  Medicare:         {fmt_money(data['medicare_tax'])}")
+    click.echo(f"  ─────────────────────────────────")
+    click.echo(f"  Net pay:          {fmt_money(data['net_pay'])}")
+    click.echo(f"\n  Employer true cost:{fmt_money(data['true_cost'])}")
+
+
+if __name__ == "__main__":
+    cli()
