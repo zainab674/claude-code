@@ -8,6 +8,7 @@ import sys
 import logging
 import inspect
 from contextlib import asynccontextmanager
+from config import settings
 
 logger = logging.getLogger("payrollos.startup")
 
@@ -61,8 +62,8 @@ def validate_config():
 
     # Check required variables
     for var, desc in REQUIRED_IN_PRODUCTION:
-        val = os.getenv(var, "")
-        if not val:
+        val = getattr(settings, var, "")
+        if not val or val == "change_this_in_production":
             if env == "production":
                 errors.append(f"  ✗ {var} is not set ({desc})")
             else:
@@ -70,7 +71,7 @@ def validate_config():
 
     # Check insecure defaults
     for var, bad_values in INSECURE_DEFAULTS.items():
-        val = os.getenv(var, "")
+        val = getattr(settings, var, "")
         if val.lower() in [b.lower() for b in bad_values]:
             if env == "production":
                 errors.append(f"  ✗ {var} is using an insecure default value")
@@ -78,7 +79,7 @@ def validate_config():
                 warnings.append(f"  ⚠ {var} is using an insecure default (change before deploying)")
 
     # JWT secret length
-    jwt = os.getenv("JWT_SECRET", "")
+    jwt = settings.JWT_SECRET
     if jwt and len(jwt) < MINIMUM_JWT_SECRET_LENGTH:
         if env == "production":
             errors.append(f"  ✗ JWT_SECRET must be at least {MINIMUM_JWT_SECRET_LENGTH} characters")
@@ -86,7 +87,7 @@ def validate_config():
             warnings.append(f"  ⚠ JWT_SECRET is too short ({len(jwt)} chars, need {MINIMUM_JWT_SECRET_LENGTH}+)")
 
     # SSN encryption key
-    if not os.getenv("SSN_ENCRYPTION_KEY"):
+    if not settings.SSN_ENCRYPTION_KEY:
         warnings.append("  ⚠ SSN_ENCRYPTION_KEY not set — SSNs will not be encrypted")
 
 

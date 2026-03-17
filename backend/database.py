@@ -1,10 +1,15 @@
+import certifi
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
 from config import settings
 import models
 
 async def init_db():
-    client = AsyncIOMotorClient(settings.MONGODB_URL, uuidRepresentation='standard')
+    client = AsyncIOMotorClient(
+        settings.MONGODB_URL, 
+        uuidRepresentation='standard',
+        tlsCAFile=certifi.where()
+    )
     await init_beanie(
         database=client.get_default_database(),
         document_models=[
