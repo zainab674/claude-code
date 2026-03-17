@@ -26,7 +26,7 @@ app.add_middleware(MultiTenantMiddleware)
 app.add_middleware(RequestLogMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS.split(","),
+    allow_origins=["https://payroll.qbxpress.com", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
