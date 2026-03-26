@@ -19,6 +19,7 @@ class HoursOverride(BaseModel):
     double_time_hours: float = 0.0
     bonus_pay: float = 0.0
     commission_pay: float = 0.0
+    tips_pay: float = 0.0
     reimbursement: float = 0.0
 
 
@@ -110,6 +111,8 @@ async def run_payroll(
             regular_pay=float(result.regular_pay),
             overtime_pay=float(result.overtime_pay),
             bonus_pay=float(result.bonus_pay),
+            commission_pay=float(result.commission_pay),
+            tips_pay=float(result.tips_pay),
             reimbursement=float(result.reimbursement),
             gross_pay=float(result.gross_pay),
             federal_income_tax=float(result.federal_income_tax),
@@ -237,6 +240,9 @@ class CalcRequest(BaseModel):
     health_insurance: float = 0
     retirement_401k_pct: float = 0
     bonus_pay: float = 0
+    tips_pay: float = 0
+    is_65_plus: bool = False
+    is_blind: bool = False
 
 
 @router.post("/calculate")
@@ -327,6 +333,7 @@ def _build_calc_input(emp: Employee, h: HoursOverride, ytd_gross=0, ytd_ss_wages
         double_time_hours=h.double_time_hours,
         bonus_pay=h.bonus_pay,
         commission_pay=h.commission_pay,
+        tips_pay=getattr(h, 'tips_pay', 0),
         reimbursement=h.reimbursement,
         health_insurance_deduction=float(emp.health_insurance_deduction or 0),
         dental_deduction=float(emp.dental_deduction or 0),
@@ -337,6 +344,8 @@ def _build_calc_input(emp: Employee, h: HoursOverride, ytd_gross=0, ytd_ss_wages
         additional_federal_withholding=float(emp.additional_federal_withholding or 0),
         exempt_from_federal=emp.exempt_from_federal or False,
         exempt_from_state=emp.exempt_from_state or False,
+        is_65_plus=emp.is_65_plus or False,
+        is_blind=emp.is_blind or False,
         ytd_gross=ytd_gross,
         ytd_ss_wages=ytd_ss_wages,
     )
@@ -413,6 +422,8 @@ def _result_to_dict(employee_id, emp, result):
         "regular_pay": float(result.regular_pay),
         "overtime_pay": float(result.overtime_pay),
         "bonus_pay": float(result.bonus_pay),
+        "commission_pay": float(result.commission_pay),
+        "tips_pay": float(result.tips_pay),
         "total_pretax_deductions": float(result.total_pretax_deductions),
         "taxable_gross": float(result.taxable_gross),
         "federal_income_tax": float(result.federal_income_tax),

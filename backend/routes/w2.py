@@ -26,10 +26,14 @@ async def get_w2_data(
         box12_d = round(to_float(r["ytd_401k"]), 2)
         # Taxable wages (Box 1) = gross - pretax deductions
         box1 = round(to_float(r["ytd_gross"]) - to_float(r["ytd_pretax"]), 2)
-        # Box 3: SS wages (capped at $168,600 for 2024 - should be dynamic but keeping logic)
-        box3 = round(min(to_float(r["ytd_gross"]), 168600.0), 2)
+        # Box 3: SS wages (capped at $184,500 for 2026)
+        box3 = round(min(to_float(r["ytd_gross"]), 184500.0), 2)
         # Box 5: Medicare wages (no cap)
         box5 = round(to_float(r["ytd_gross"]), 2)
+
+        # Box 12 New Codes: TP (Tips), TT (Overtime)
+        box12_tp = round(to_float(r["ytd_tips"]), 2)
+        box12_tt = round(to_float(r["ytd_overtime"]), 2)
 
         emp = await Employee.find_one(Employee.id == r["_id"])
         if not emp:
@@ -51,6 +55,8 @@ async def get_w2_data(
             "box5_medicare_wages":      box5,
             "box6_medicare_withheld":   round(to_float(r["ytd_medicare"]), 2),
             "box12_code_d_401k":        box12_d,
+            "box12_code_tp_tips":       box12_tp,
+            "box12_code_tt_overtime":   box12_tt,
             "box16_state_wages":        box1,
             "box17_state_income_tax":   round(to_float(r["ytd_state"]), 2),
             "employer": {
@@ -133,6 +139,8 @@ async def _fetch_ytd(company_id: UUID, year: int):
                 "ytd_medicare": {"$sum": "$medicare_tax"},
                 "ytd_401k": {"$sum": "$retirement_401k"},
                 "ytd_pretax": {"$sum": "$total_pretax_deductions"},
+                "ytd_tips": {"$sum": "$tips_pay"},
+                "ytd_overtime": {"$sum": "$overtime_pay"},
             }
         }
     ]
@@ -165,6 +173,8 @@ def _build_efw2_xml(w2s: list, year: int) -> str:
         add("Box5MedicareWages",  f"{w['box5_medicare_wages']:.2f}")
         add("Box6MedicareTax",    f"{w['box6_medicare_withheld']:.2f}")
         add("Box12D401k",         f"{w['box12_code_d_401k']:.2f}")
+        add("Box12TPTips",        f"{w.get('box12_code_tp_tips', 0):.2f}")
+        add("Box12TTOvertime",    f"{w.get('box12_code_tt_overtime', 0):.2f}")
         add("Box16StateWages",    f"{w['box16_state_wages']:.2f}")
         add("Box17StateTax",      f"{w['box17_state_income_tax']:.2f}")
 

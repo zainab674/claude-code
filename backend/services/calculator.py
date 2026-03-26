@@ -8,35 +8,109 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-# ─── 2024 Federal Tax Brackets ───────────────────────────────
+# ── 2026 Federal Tax Brackets ───────────────────────────────
 FEDERAL_BRACKETS = {
     "single": [
-        (11600,  0.10),
-        (47150,  0.12),
-        (100525, 0.22),
-        (191950, 0.24),
-        (243725, 0.32),
-        (609350, 0.35),
+        (12400,  0.10),
+        (50400,  0.12),
+        (105700, 0.22),
+        (201775, 0.24),
+        (256225, 0.32),
+        (640600, 0.35),
         (float("inf"), 0.37),
     ],
     "married": [
-        (23200,  0.10),
-        (94300,  0.12),
-        (201050, 0.22),
-        (383900, 0.24),
-        (487450, 0.32),
-        (731200, 0.35),
+        (24800,  0.10),
+        (100800, 0.12),
+        (211400, 0.22),
+        (403550, 0.24),
+        (512450, 0.32),
+        (768700, 0.35),
         (float("inf"), 0.37),
     ],
     "head_of_household": [
-        (16550,  0.10),
-        (63100,  0.12),
-        (100500, 0.22),
-        (191950, 0.24),
-        (243700, 0.32),
-        (609350, 0.35),
+        (17700,  0.10),
+        (67450,  0.12),
+        (105700, 0.22),
+        (201750, 0.24),
+        (256200, 0.32),
+        (640600, 0.35),
         (float("inf"), 0.37),
     ],
+}
+
+# ── 2026 State Tax Brackets ───────────────────────────────
+STATE_BRACKETS = {
+    "NY": {
+        "single": [
+            (12800, 0.040),
+            (17650, 0.045),
+            (20900, 0.0525),
+            (107650, 0.055),
+            (269300, 0.060),
+            (1616450, 0.0685),
+            (5000000, 0.0965),
+            (25000000, 0.103),
+            (float("inf"), 0.109),
+        ],
+        "married": [
+            (17150, 0.040),
+            (23600, 0.045),
+            (27900, 0.0525),
+            (161550, 0.055),
+            (323200, 0.060),
+            (2155350, 0.0685),
+            (5000000, 0.0965),
+            (25000000, 0.103),
+            (float("inf"), 0.109),
+        ],
+        "head_of_household": [
+            (8500, 0.040),
+            (11700, 0.045),
+            (13900, 0.0525),
+            (80650, 0.055),
+            (215400, 0.060),
+            (1077550, 0.0685),
+            (5000000, 0.0965),
+            (25000000, 0.103),
+            (float("inf"), 0.109),
+        ]
+    },
+    "CA": {
+        "single": [
+            (11079, 0.01),
+            (26264, 0.02),
+            (41452, 0.04),
+            (57542, 0.06),
+            (72724, 0.08),
+            (371479, 0.093),
+            (445771, 0.103),
+            (557215, 0.113),
+            (float("inf"), 0.123),
+        ],
+        "married": [
+            (22158, 0.01),
+            (52528, 0.02),
+            (82904, 0.04),
+            (115084, 0.06),
+            (145448, 0.08),
+            (742958, 0.093),
+            (891542, 0.103),
+            (1114430, 0.113),
+            (float("inf"), 0.123),
+        ],
+        "head_of_household": [
+            (22173, 0.01),
+            (52530, 0.02),
+            (67716, 0.04),
+            (83805, 0.06),
+            (98990, 0.08),
+            (505208, 0.093),
+            (606251, 0.103),
+            (757816, 0.113),
+            (float("inf"), 0.123),
+        ]
+    }
 }
 
 # State income tax rates (flat rate approximations)
@@ -60,7 +134,7 @@ STATE_TAX_RATES = {
 SOCIAL_SECURITY_RATE = Decimal("0.062")      # employee
 MEDICARE_RATE = Decimal("0.0145")            # employee
 ADDITIONAL_MEDICARE_RATE = Decimal("0.009")  # over $200k
-SS_WAGE_BASE = Decimal("168600")             # 2024 SS wage base
+SS_WAGE_BASE = Decimal("184500")             # 2026 SS wage base
 MEDICARE_THRESHOLD = Decimal("200000")
 
 # Employer-side
@@ -69,11 +143,23 @@ EMPLOYER_MEDICARE_RATE = Decimal("0.0145")
 FUTA_RATE = Decimal("0.006")
 FUTA_WAGE_BASE = Decimal("7000")
 
-# Standard deduction (reduces taxable income for federal calc)
+# Standard deduction (2026)
 STANDARD_DEDUCTION = {
-    "single": Decimal("14600"),
-    "married": Decimal("29200"),
-    "head_of_household": Decimal("21900"),
+    "single": Decimal("16100"),
+    "married": Decimal("32200"),
+    "head_of_household": Decimal("24150"),
+}
+ADDITIONAL_STD_DEDUCTION = {
+    "single": Decimal("2050"),
+    "married": Decimal("1650"),
+    "head_of_household": Decimal("2050"),
+}
+# Senior Bonus Deduction (OBBBA)
+SENIOR_BONUS_AMOUNT = Decimal("6000")
+SENIOR_BONUS_PHASE_OUT = {
+    "single": (75000, 175000),
+    "married": (150000, 250000),
+    "head_of_household": (75000, 175000),
 }
 
 
@@ -96,6 +182,7 @@ class PayCalculationInput:
     # Extras
     bonus_pay: float = 0.0
     commission_pay: float = 0.0
+    tips_pay: float = 0.0
     reimbursement: float = 0.0    # non-taxable
 
     # Pre-tax deductions
@@ -112,6 +199,8 @@ class PayCalculationInput:
     # Flags
     exempt_from_federal: bool = False
     exempt_from_state: bool = False
+    is_65_plus: bool = False
+    is_blind: bool = False
 
     # YTD (for wage base caps)
     # ytd_gross    = total YTD gross wages (FUTA cap + Medicare threshold)
@@ -129,6 +218,7 @@ class PayCalculationResult:
     bonus_pay: Decimal
     commission_pay: Decimal
     reimbursement: Decimal
+    tips_pay: Decimal
     gross_pay: Decimal                # all taxable + non-taxable
 
     # Pre-tax deductions
@@ -189,9 +279,10 @@ class PayrollCalculator:
 
         bonus = Decimal(str(inp.bonus_pay))
         commission = Decimal(str(inp.commission_pay))
+        tips = Decimal(str(inp.tips_pay))
         reimbursement = Decimal(str(inp.reimbursement))
 
-        gross_pay = regular_pay + overtime_pay + double_pay + bonus + commission + reimbursement
+        gross_pay = regular_pay + overtime_pay + double_pay + bonus + commission + tips + reimbursement
 
         # ── Pre-tax deductions (reduce federal/state taxable) ──
         health = Decimal(str(inp.health_insurance_deduction))
@@ -210,9 +301,32 @@ class PayrollCalculator:
             fed_tax = Decimal("0")
         else:
             annual_taxable = taxable_gross * p
+            
             std_ded = STANDARD_DEDUCTION.get(inp.filing_status, STANDARD_DEDUCTION["single"])
-            taxable_income = max(annual_taxable - std_ded, Decimal("0"))
-            annual_fed = self._apply_brackets(taxable_income, inp.filing_status)
+            
+            # Additional deduction for 65+ or blind
+            extra_ded = Decimal("0")
+            if inp.is_65_plus:
+                extra_ded += ADDITIONAL_STD_DEDUCTION.get(inp.filing_status, ADDITIONAL_STD_DEDUCTION["single"])
+            if inp.is_blind:
+                extra_ded += ADDITIONAL_STD_DEDUCTION.get(inp.filing_status, ADDITIONAL_STD_DEDUCTION["single"])
+            
+            # Senior Bonus Deduction (OBBBA)
+            senior_bonus = Decimal("0")
+            if inp.is_65_plus:
+                magi = annual_taxable  # Approximation
+                threshold_start, threshold_end = SENIOR_BONUS_PHASE_OUT.get(inp.filing_status, SENIOR_BONUS_PHASE_OUT["single"])
+                if magi <= threshold_start:
+                    senior_bonus = SENIOR_BONUS_AMOUNT
+                elif magi < threshold_end:
+                    excess = magi - threshold_start
+                    reduction = (excess / 1000) * 60
+                    senior_bonus = max(SENIOR_BONUS_AMOUNT - Decimal(str(reduction)), Decimal("0"))
+                else:
+                    senior_bonus = Decimal("0")
+            
+            taxable_income = max(annual_taxable - std_ded - extra_ded - senior_bonus, Decimal("0"))
+            annual_fed = self._apply_brackets(taxable_income, FEDERAL_BRACKETS.get(inp.filing_status, FEDERAL_BRACKETS["single"]))
             fed_tax = (annual_fed / p).quantize(Decimal("0.01"))
             fed_tax += Decimal(str(inp.additional_federal_withholding))
 
@@ -242,8 +356,20 @@ class PayrollCalculator:
         if inp.exempt_from_state:
             state_tax = Decimal("0")
         else:
-            state_rate = Decimal(str(STATE_TAX_RATES.get(inp.state_code, 0.05)))
-            state_tax = (taxable_gross * state_rate).quantize(Decimal("0.01"))
+            state_brackets = STATE_BRACKETS.get(inp.state_code)
+            if state_brackets:
+                annual_taxable = taxable_gross * p
+                brackets = state_brackets.get(inp.filing_status, state_brackets["single"])
+                annual_state_tax = self._apply_brackets(annual_taxable, brackets)
+                
+                # CA Mental Health Tax (1% > $1M)
+                if inp.state_code == "CA" and annual_taxable > 1000000:
+                    annual_state_tax += (annual_taxable - 1000000) * Decimal("0.01")
+                
+                state_tax = (annual_state_tax / p).quantize(Decimal("0.01"))
+            else:
+                state_rate = Decimal(str(STATE_TAX_RATES.get(inp.state_code, 0.05)))
+                state_tax = (taxable_gross * state_rate).quantize(Decimal("0.01"))
 
         local_tax = Decimal("0")
         total_employee_taxes += state_tax + local_tax
@@ -279,6 +405,7 @@ class PayrollCalculator:
             bonus_pay=bonus,
             commission_pay=commission,
             reimbursement=reimbursement,
+            tips_pay=tips,
             gross_pay=gross_pay.quantize(Decimal("0.01")),
             health_insurance=health,
             dental_insurance=dental,
@@ -306,8 +433,7 @@ class PayrollCalculator:
             effective_state_rate=eff_state,
         )
 
-    def _apply_brackets(self, taxable_income: Decimal, filing_status: str) -> Decimal:
-        brackets = FEDERAL_BRACKETS.get(filing_status, FEDERAL_BRACKETS["single"])
+    def _apply_brackets(self, taxable_income: Decimal, brackets: list) -> Decimal:
         tax = Decimal("0")
         prev_limit = Decimal("0")
         for limit, rate in brackets:

@@ -86,6 +86,8 @@ class Employee(Document):
     fsa_deduction: DecimalAnnotation = Decimal("0")
     garnishment_amount: DecimalAnnotation = Decimal("0")
     other_post_tax_deduction: DecimalAnnotation = Decimal("0")
+    is_65_plus: bool = False
+    is_blind: bool = False
     address_line1: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
@@ -167,6 +169,7 @@ class PayRunItem(Document):
     overtime_pay: DecimalAnnotation = Decimal("0")
     bonus_pay: DecimalAnnotation = Decimal("0")
     commission_pay: DecimalAnnotation = Decimal("0")
+    tips_pay: DecimalAnnotation = Decimal("0")
     reimbursement: DecimalAnnotation = Decimal("0")
     gross_pay: DecimalAnnotation = Decimal("0")
     taxable_gross: DecimalAnnotation = Decimal("0")
