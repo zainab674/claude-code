@@ -24,6 +24,7 @@ import CompliancePage from './pages/CompliancePage';
 import JobPostings from './pages/JobPostings';
 import AdminSettings from './pages/AdminSettings';
 import Reconciliation from './pages/Reconciliation';
+import IntegrationsPage from './pages/IntegrationsPage';
 import NotificationBell from './components/NotificationBell';
 import GlobalSearch from './components/GlobalSearch';
 
@@ -189,6 +190,7 @@ const NAV = [
   { id: 'compliance', label: 'Compliance', icon: '✓' },
   { id: 'jobs', label: 'Recruiting', icon: '⊕' },
   { id: 'reconciliation', label: 'Reconciliation', icon: '⇌' },
+  { id: 'integrations', label: 'Integrations', icon: '⛓' },
   { id: 'settings', label: 'Settings', icon: '⚙' },
 ];
 
@@ -344,6 +346,19 @@ function Employees() {
         <div style={{ display: 'flex', gap: 8 }}>
           <input className="search-input" placeholder="Search..." value={search}
             onChange={e => setSearch(e.target.value)} />
+          <button className="btn btn-secondary" onClick={async () => {
+            if (window.confirm('Sync employees from QBXpress?')) {
+              try {
+                const res = await api.syncEmployeesFromQBX();
+                alert(res.message);
+                load();
+              } catch (e) {
+                alert('Sync failed: ' + e.message);
+              }
+            }
+          }}>
+            ↻ Sync from QBXpress
+          </button>
           <button className="btn btn-primary" onClick={() => { setEditing(null); setShowForm(true); }}>
             + Add Employee
           </button>
@@ -372,7 +387,17 @@ function Employees() {
             {employees.map(emp => (
               <tr key={emp.id}>
                 <td>
-                  <div style={{ fontWeight: 500 }}>{emp.full_name}</div>
+                  <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {emp.full_name}
+                    {emp.qb_employee_id && (
+                      <span title={`QuickBooks ID: ${emp.qb_employee_id}`} style={{
+                        fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
+                        background: 'rgba(44,160,28,0.15)', color: '#2CA01C',
+                        border: '1px solid rgba(44,160,28,0.35)', letterSpacing: '0.03em',
+                        cursor: 'default', flexShrink: 0,
+                      }}>QB</span>
+                    )}
+                  </div>
                   <div style={{ fontSize: 12, color: '#666' }}>{emp.email}</div>
                 </td>
                 <td>{emp.job_title || '—'}</td>
@@ -409,6 +434,8 @@ function EmployeeForm({ initial, onSave, onCancel }) {
     federal_allowances: 0, additional_federal_withholding: 0,
     health_insurance_deduction: 0, dental_deduction: 0, vision_deduction: 0,
     retirement_401k_pct: 0, hsa_deduction: 0, garnishment_amount: 0,
+    child_credits: 0, other_dependent_credits: 0, dependent_care_credits: 0,
+    ca_allowances: 0,
   });
   const [tab, setTab] = useState('basic');
   const [saving, setSaving] = useState(false);
@@ -465,6 +492,16 @@ function EmployeeForm({ initial, onSave, onCancel }) {
               <Field label="Federal allowances" value={form.federal_allowances} onChange={v => set('federal_allowances', Number(v))} type="number" />
               <Field label="Extra federal withholding ($)" value={form.additional_federal_withholding}
                 onChange={v => set('additional_federal_withholding', Number(v))} type="number" step="0.01" />
+              <Field label="Child Tax Credits ($ annual)" value={form.child_credits}
+                onChange={v => set('child_credits', Number(v))} type="number" step="1" />
+              <Field label="Other Dependent Credits ($ annual)" value={form.other_dependent_credits}
+                onChange={v => set('other_dependent_credits', Number(v))} type="number" step="1" />
+              <Field label="Dependent Care Credits ($ annual)" value={form.dependent_care_credits}
+                onChange={v => set('dependent_care_credits', Number(v))} type="number" step="1" />
+              {form.state_code === 'CA' && (
+                <Field label="CA Exemption Allowances" value={form.ca_allowances}
+                  onChange={v => set('ca_allowances', Number(v))} type="number" step="1" />
+              )}
             </div>
           )}
           {tab === 'benefits' && (
@@ -1023,6 +1060,7 @@ export default function App() {
     compliance: <CompliancePage />,
     jobs: <JobPostings />,
     reconciliation: <Reconciliation />,
+    integrations: <IntegrationsPage />,
     settings: <AdminSettings />,
   };
 

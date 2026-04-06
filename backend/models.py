@@ -86,12 +86,18 @@ class Employee(Document):
     fsa_deduction: DecimalAnnotation = Decimal("0")
     garnishment_amount: DecimalAnnotation = Decimal("0")
     other_post_tax_deduction: DecimalAnnotation = Decimal("0")
+    # 2026 Tax Credits (Step 3 & Step 4 of W-4)
+    child_credits: DecimalAnnotation = Decimal("0")
+    other_dependent_credits: DecimalAnnotation = Decimal("0")
+    dependent_care_credits: DecimalAnnotation = Decimal("0")
+    ca_allowances: int = 0
     is_65_plus: bool = False
     is_blind: bool = False
     address_line1: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
     zip: Optional[str] = None
+    qb_employee_id: Optional[str] = None  # QuickBooks Employee ID after sync
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -175,6 +181,7 @@ class PayRunItem(Document):
     taxable_gross: DecimalAnnotation = Decimal("0")
     federal_income_tax: DecimalAnnotation = Decimal("0")
     state_income_tax: DecimalAnnotation = Decimal("0")
+    state_disability_insurance: DecimalAnnotation = Decimal("0")
     local_income_tax: DecimalAnnotation = Decimal("0")
     social_security_tax: DecimalAnnotation = Decimal("0")
     medicare_tax: DecimalAnnotation = Decimal("0")
@@ -806,3 +813,36 @@ class AuditLog(Document):
 
     class Settings:
         name = "audit_logs"
+
+
+# ── QuickBooks Integration ───────────────────────────────────────
+class QuickBooksConnection(Document):
+    id: UUID4 = Field(default_factory=uuid.uuid4)
+    company_id: Annotated[UUID4, Indexed(unique=True)]
+    realm_id: str                          # QuickBooks company (realm) ID
+    access_token: str                      # QB OAuth access token
+    refresh_token: str                     # QB OAuth refresh token
+    token_expires_at: datetime             # When access token expires
+    refresh_expires_at: datetime           # When refresh token expires (~100 days)
+    qb_company_name: Optional[str] = None  # Company name fetched from QB
+    is_sandbox: bool = True                # True = sandbox environment
+    connected_at: datetime = Field(default_factory=datetime.utcnow)
+    last_synced_at: Optional[datetime] = None
+
+    class Settings:
+        name = "quickbooks_connections"
+
+
+# ── QBXpress Integration ─────────────────────────────────────────
+class QBXpressConnection(Document):
+    id: UUID4 = Field(default_factory=uuid.uuid4)
+    company_id: Annotated[UUID4, Indexed(unique=True)]
+    token: str                                   # Bearer token issued by QBXpress
+    qbx_user_id: Optional[str] = None           # QBXpress user._id
+    qbx_company_id: Optional[str] = None         # QBXpress company._id
+    qbx_company_name: Optional[str] = None      # Company name from QBXpress
+    connected_at: datetime = Field(default_factory=datetime.utcnow)
+    last_synced_at: Optional[datetime] = None
+
+    class Settings:
+        name = "qbxpress_connections"

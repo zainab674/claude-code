@@ -50,6 +50,8 @@ async def init_db():
             models.CustomFieldSchema,
             models.CustomFieldValue,
             models.PayrollAdjustment,
+            models.QuickBooksConnection,
+            models.QBXpressConnection,
         ]
     )
 

@@ -14,6 +14,17 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     SSN_ENCRYPTION_KEY: Optional[str] = None
 
+    # QuickBooks Online OAuth 2.0
+    QB_CLIENT_ID: str = ""
+    QB_CLIENT_SECRET: str = ""
+    QB_REDIRECT_URI: str = "http://localhost:8000/quickbooks/callback"
+    QB_SANDBOX: bool = True  # Set to False in production
+
+    # QBXpress integration
+    QBXPRESS_API_URL: str = "http://localhost:5001"
+    QBXPRESS_FRONTEND_URL: str = "http://localhost:9000"
+    PAYROLLOS_BACKEND_URL: str = "http://localhost:8000"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()

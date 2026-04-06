@@ -33,6 +33,11 @@ class EmployeeCreate(BaseModel):
     retirement_401k_pct: float = 0
     hsa_deduction: float = 0
     garnishment_amount: float = 0
+    # 2026 Tax Credits
+    child_credits: float = 0
+    other_dependent_credits: float = 0
+    dependent_care_credits: float = 0
+    ca_allowances: int = 0
     address_line1: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
@@ -177,11 +182,16 @@ def _serialize(e: Employee) -> dict:
         "hsa_deduction": float(e.hsa_deduction or 0),
         "garnishment_amount": float(e.garnishment_amount or 0),
         "additional_federal_withholding": float(e.additional_federal_withholding or 0),
+        "child_credits": float(e.child_credits or 0),
+        "other_dependent_credits": float(e.other_dependent_credits or 0),
+        "dependent_care_credits": float(e.dependent_care_credits or 0),
+        "ca_allowances": e.ca_allowances,
         "exempt_from_federal": e.exempt_from_federal,
         "exempt_from_state": e.exempt_from_state,
         "address_line1": e.address_line1,
         "city": e.city,
         "state": e.state,
         "zip": e.zip,
+        "qb_employee_id": e.qb_employee_id,
         "created_at": str(e.created_at) if e.created_at else None,
     }

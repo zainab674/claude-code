@@ -5,6 +5,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, Response
 from models import Employee, PayRun, PayRunItem, PayPeriod, TimeEntry
 from utils.auth import get_current_user
+from utils.numbers import to_float
 from uuid import UUID
 
 router = APIRouter(prefix="/export", tags=["export"])
@@ -179,19 +180,19 @@ async def export_employee_ytd(
             "job_title": emp.job_title or "",
             "state": emp.state_code or "",
             "filing_status": emp.filing_status or "",
-            "ytd_gross": round(float(stat["ytd_gross"] or 0), 2),
-            "ytd_federal_income_tax": round(float(stat["ytd_federal"] or 0), 2),
-            "ytd_state_income_tax": round(float(stat["ytd_state"] or 0), 2),
-            "ytd_social_security": round(float(stat["ytd_ss"] or 0), 2),
-            "ytd_medicare": round(float(stat["ytd_medicare"] or 0), 2),
-            "ytd_additional_medicare": round(float(stat["ytd_add_medicare"] or 0), 2),
-            "ytd_401k": round(float(stat["ytd_401k"] or 0), 2),
-            "ytd_health_insurance": round(float(stat["ytd_health"] or 0), 2),
-            "ytd_dental": round(float(stat["ytd_dental"] or 0), 2),
-            "ytd_vision": round(float(stat["ytd_vision"] or 0), 2),
-            "ytd_hsa": round(float(stat["ytd_hsa"] or 0), 2),
-            "ytd_garnishment": round(float(stat["ytd_garnishment"] or 0), 2),
-            "ytd_net": round(float(stat["ytd_net"] or 0), 2),
+            "ytd_gross": round(to_float(stat.get("ytd_gross")), 2),
+            "ytd_federal_income_tax": round(to_float(stat.get("ytd_federal")), 2),
+            "ytd_state_income_tax": round(to_float(stat.get("ytd_state")), 2),
+            "ytd_social_security": round(to_float(stat.get("ytd_ss")), 2),
+            "ytd_medicare": round(to_float(stat.get("ytd_medicare")), 2),
+            "ytd_additional_medicare": round(to_float(stat.get("ytd_add_medicare")), 2),
+            "ytd_401k": round(to_float(stat.get("ytd_401k")), 2),
+            "ytd_health_insurance": round(to_float(stat.get("ytd_health")), 2),
+            "ytd_dental": round(to_float(stat.get("ytd_dental")), 2),
+            "ytd_vision": round(to_float(stat.get("ytd_vision")), 2),
+            "ytd_hsa": round(to_float(stat.get("ytd_hsa")), 2),
+            "ytd_garnishment": round(to_float(stat.get("ytd_garnishment")), 2),
+            "ytd_net": round(to_float(stat.get("ytd_net")), 2),
         })
     
     rows.sort(key=lambda x: (x["last_name"], x["first_name"]))

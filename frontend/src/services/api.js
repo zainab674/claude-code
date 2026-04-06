@@ -107,9 +107,9 @@ export const previewPayroll = (data) =>
 export const runPayroll = (data) =>
   request('/payroll/run', { method: 'POST', body: JSON.stringify(data) });
 export const getPayrollHistory = (p = {}) => request(`/payroll/history${q(p)}`);
-export const getPayRun = (id) => request(`/payroll/runs/${id}`);
+export const getPayRun = (id) => request(`/payroll/history/${id}`);
 export const voidPayRun = (id) =>
-  request(`/payroll/runs/${id}/void`, { method: 'POST' });
+  request(`/payroll/history/${id}/void`, { method: 'POST' });
 
 // ── Paystubs ──────────────────────────────────────────────────
 export const getPaystubs = (p = {}) => request(`/paystubs${q(p)}`);
@@ -395,6 +395,40 @@ export const getCustomFieldValues = (entity_type, entity_id) =>
 export const setCustomFieldValues = (entity_type, entity_id, values) =>
   request(`/custom-fields/values/${entity_type}/${entity_id}`,
     { method: 'PUT', body: JSON.stringify(values) });
+
+// ── QBXpress Integration ──────────────────────────────────────
+export const getQBXStatus = () => request('/qbxpress/status');
+export const getQBXAuthUrl = () => request('/qbxpress/auth-url');
+export const disconnectQBX = () => request('/qbxpress/disconnect', { method: 'DELETE' });
+export const fetchQBXCompany = () => request('/qbxpress/fetch/company');
+export const fetchQBXAccounts = () => request('/qbxpress/fetch/accounts');
+export const fetchQBXOverview = () => request('/qbxpress/fetch/overview');
+export const syncPayrollToQBX = (payRunId) =>
+  request(`/qbxpress/sync/payroll/${payRunId}`, { method: 'POST' });
+export const syncEmployeesFromQBX = () =>
+  request('/qbxpress/sync/employees', { method: 'POST' });
+export const syncEmployeesToQBX = () =>
+  request('/qbxpress/sync/employees/push', { method: 'POST' });
+
+// ── QuickBooks Integration ────────────────────────────────────
+export const getQBStatus = () => request('/quickbooks/status');
+export const forceRefreshQB = () => request('/quickbooks/refresh', { method: 'POST' });
+export const getQBAuthUrl = () => request('/quickbooks/auth-url');
+export const getQBConnectUrl = () => `${BASE}/quickbooks/connect`;
+export const disconnectQB = () => request('/quickbooks/disconnect', { method: 'DELETE' });
+export const fetchQBEmployees = () => request('/quickbooks/fetch/employees');
+export const fetchQBAccounts = () => request('/quickbooks/fetch/accounts');
+export const fetchQBVendors = () => request('/quickbooks/fetch/vendors');
+export const syncEmployeesToQB = () =>
+  request('/quickbooks/sync/employees', { method: 'POST' });
+export const syncPayrollToQB = (payRunId, accountMapping = {}) =>
+  request(`/quickbooks/sync/payroll/${payRunId}`, {
+    method: 'POST', body: JSON.stringify({ account_mapping: accountMapping }),
+  });
+export const importEmployeesFromQB = (qbIds = []) =>
+  request('/quickbooks/import/employees', {
+    method: 'POST', body: JSON.stringify({ qb_employee_ids: qbIds }),
+  });
 
 // ── Health ────────────────────────────────────────────────────
 export const getHealth = () => request('/health');

@@ -20,6 +20,8 @@ PUBLIC_PATHS = {
     "/auth/login", "/auth/register",
     "/auth/forgot-password", "/auth/reset-password",
     "/payroll/calculate",
+    "/quickbooks/callback",  # Intuit OAuth redirect — no JWT present
+    "/qbxpress/callback",   # QBXpress OAuth-like redirect — no JWT present
 }
 
 # Routes that need auth but don't carry a company_id (e.g. /users/me)

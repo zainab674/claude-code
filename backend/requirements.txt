@@ -40,3 +40,7 @@ pytest-cov==5.0.0
 
 # Email validation
 email-validator>=2.0.0
+
+# QuickBooks SDK
+intuit-oauth==1.2.6
+python-quickbooks==0.9.12

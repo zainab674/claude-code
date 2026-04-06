@@ -3,6 +3,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from models import PayRun, PayRunItem, PayPeriod, Employee
 from utils.auth import get_current_user
+from utils.numbers import to_float
 from uuid import UUID
 
 router = APIRouter(prefix="/reconciliation", tags=["reconciliation"])
@@ -182,10 +183,10 @@ async def ytd_consistency_check(
         "year": year,
         "run_count": row["run_count"],
         "sum_of_runs": {
-            "gross": round(float(row["sum_gross"]), 2),
-            "net": round(float(row["sum_net"]), 2),
-            "employee_taxes": round(float(row["sum_emp_tax"]), 2),
-            "employer_taxes": round(float(row["sum_er_tax"]), 2),
+            "gross": round(to_float(row["sum_gross"]), 2),
+            "net": round(to_float(row["sum_net"]), 2),
+            "employee_taxes": round(to_float(row["sum_emp_tax"]), 2),
+            "employer_taxes": round(to_float(row["sum_er_tax"]), 2),
         },
         "status": "ok",
         "notes": "YTD accumulators match sum of completed runs" if row["run_count"] > 0 else "No completed runs this year",

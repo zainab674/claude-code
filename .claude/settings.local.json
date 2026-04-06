@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \":*)",
+      "Bash(node:*)",
+      "Bash(__NEW_LINE_cffeb0fb2991130d__ node -e \":*)"
+    ]
+  }
+}

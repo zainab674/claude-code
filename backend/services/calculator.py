@@ -113,6 +113,9 @@ STATE_BRACKETS = {
     }
 }
 
+CA_SDI_RATE = Decimal("0.013")  # 1.3% for 2026
+CA_EXEMPTION_ALLOWANCE = Decimal("169.30")
+
 # State income tax rates (flat rate approximations)
 STATE_TAX_RATES = {
     "AL": 0.050, "AK": 0.000, "AZ": 0.025, "AR": 0.055,
@@ -202,6 +205,12 @@ class PayCalculationInput:
     is_65_plus: bool = False
     is_blind: bool = False
 
+    # 2026 Dependents & Credits
+    child_credits: float = 0.0          # Annual total (e.g. 2200 per child)
+    other_dependent_credits: float = 0.0 # Annual total (e.g. 500)
+    dependent_care_credits: float = 0.0  # Annual total
+    ca_allowances: int = 0              # For CA exemption credits
+
     # YTD (for wage base caps)
     # ytd_gross    = total YTD gross wages (FUTA cap + Medicare threshold)
     # ytd_ss_wages = total YTD SS-taxable wages paid (tracks $168,600 SS wage base)
@@ -234,6 +243,7 @@ class PayCalculationResult:
     # Employee taxes
     federal_income_tax: Decimal
     state_income_tax: Decimal
+    state_disability_insurance: Decimal  # e.g. CA SDI
     local_income_tax: Decimal
     social_security_tax: Decimal
     medicare_tax: Decimal
@@ -327,7 +337,19 @@ class PayrollCalculator:
             
             taxable_income = max(annual_taxable - std_ded - extra_ded - senior_bonus, Decimal("0"))
             annual_fed = self._apply_brackets(taxable_income, FEDERAL_BRACKETS.get(inp.filing_status, FEDERAL_BRACKETS["single"]))
-            fed_tax = (annual_fed / p).quantize(Decimal("0.01"))
+            
+            # --- 2026 Child Tax Credit & Other Credits ---
+            # Phase-out: Starts at $400,000 for MFJ. $50 reduction per $1,000 over.
+            phase_out_start = 400000 if inp.filing_status == "married" else 200000
+            total_annual_credits = Decimal(str(inp.child_credits)) + Decimal(str(inp.other_dependent_credits))
+            
+            if annual_taxable > phase_out_start:
+                excess = annual_taxable - Decimal(str(phase_out_start))
+                reduction = (excess // 1000) * 50
+                total_annual_credits = max(total_annual_credits - Decimal(str(reduction)), Decimal("0"))
+            
+            net_annual_fed = max(annual_fed - total_annual_credits, Decimal("0"))
+            fed_tax = (net_annual_fed / p).quantize(Decimal("0.01"))
             fed_tax += Decimal(str(inp.additional_federal_withholding))
 
         # ── FICA ──────────────────────────────────────────────
@@ -352,6 +374,13 @@ class PayrollCalculator:
 
         total_employee_taxes = fed_tax + ss_tax + medicare_tax + add_medicare
 
+        # ── State Disability Insurance (CA SDI) ──────────────────
+        state_disability_insurance = Decimal("0")
+        if inp.state_code == "CA":
+            state_disability_insurance = (taxable_gross * CA_SDI_RATE).quantize(Decimal("0.01"))
+        
+        total_employee_taxes += state_disability_insurance
+
         # ── State Income Tax ──────────────────────────────────
         if inp.exempt_from_state:
             state_tax = Decimal("0")
@@ -365,6 +394,11 @@ class PayrollCalculator:
                 # CA Mental Health Tax (1% > $1M)
                 if inp.state_code == "CA" and annual_taxable > 1000000:
                     annual_state_tax += (annual_taxable - 1000000) * Decimal("0.01")
+                
+                # CA Exemption Credits
+                if inp.state_code == "CA" and inp.ca_allowances > 0:
+                    ca_credits = Decimal(str(inp.ca_allowances)) * CA_EXEMPTION_ALLOWANCE
+                    annual_state_tax = max(annual_state_tax - ca_credits, Decimal("0"))
                 
                 state_tax = (annual_state_tax / p).quantize(Decimal("0.01"))
             else:
@@ -416,6 +450,7 @@ class PayrollCalculator:
             taxable_gross=taxable_gross,
             federal_income_tax=fed_tax,
             state_income_tax=state_tax,
+            state_disability_insurance=state_disability_insurance,
             local_income_tax=local_tax,
             social_security_tax=ss_tax,
             medicare_tax=medicare_tax,

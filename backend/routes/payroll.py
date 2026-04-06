@@ -7,6 +7,7 @@ from models import Employee, PayPeriod, PayRun, PayRunItem, Paystub, Company
 from services.calculator import calculator, PayCalculationInput
 from services.pdf_generator import generate_paystub_pdf
 from utils.auth import get_current_user
+from utils.numbers import to_float
 import os
 
 router = APIRouter(prefix="/payroll", tags=["payroll"])
@@ -117,6 +118,7 @@ async def run_payroll(
             gross_pay=float(result.gross_pay),
             federal_income_tax=float(result.federal_income_tax),
             state_income_tax=float(result.state_income_tax),
+            state_disability_insurance=float(result.state_disability_insurance or 0),
             social_security_tax=float(result.social_security_tax),
             medicare_tax=float(result.medicare_tax),
             additional_medicare_tax=float(result.additional_medicare_tax),
@@ -342,6 +344,10 @@ def _build_calc_input(emp: Employee, h: HoursOverride, ytd_gross=0, ytd_ss_wages
         hsa_deduction=float(emp.hsa_deduction or 0),
         garnishment_amount=float(emp.garnishment_amount or 0),
         additional_federal_withholding=float(emp.additional_federal_withholding or 0),
+        child_credits=float(emp.child_credits or 0),
+        other_dependent_credits=float(emp.other_dependent_credits or 0),
+        dependent_care_credits=float(emp.dependent_care_credits or 0),
+        ca_allowances=emp.ca_allowances or 0,
         exempt_from_federal=emp.exempt_from_federal or False,
         exempt_from_state=emp.exempt_from_state or False,
         is_65_plus=emp.is_65_plus or False,
@@ -397,12 +403,12 @@ async def _get_ytd(employee_id, before_date):
         
     row = results[0]
     return {
-        "gross": float(row.get("gross", 0)),
-        "federal": float(row.get("federal", 0)),
-        "state": float(row.get("state", 0)),
-        "social_security": float(row.get("social_security", 0)),
-        "medicare": float(row.get("medicare", 0)),
-        "net": float(row.get("net", 0)),
+        "gross": to_float(row.get("gross")),
+        "federal": to_float(row.get("federal")),
+        "state": to_float(row.get("state")),
+        "social_security": to_float(row.get("social_security")),
+        "medicare": to_float(row.get("medicare")),
+        "net": to_float(row.get("net")),
     }
 
 
@@ -428,6 +434,7 @@ def _result_to_dict(employee_id, emp, result):
         "taxable_gross": float(result.taxable_gross),
         "federal_income_tax": float(result.federal_income_tax),
         "state_income_tax": float(result.state_income_tax),
+        "state_disability_insurance": float(result.state_disability_insurance or 0),
         "social_security_tax": float(result.social_security_tax),
         "medicare_tax": float(result.medicare_tax),
         "total_employee_taxes": float(result.total_employee_taxes),
@@ -467,6 +474,7 @@ def _serialize_item(i: PayRunItem) -> dict:
         "net_pay": float(i.net_pay or 0),
         "federal_income_tax": float(i.federal_income_tax or 0),
         "state_income_tax": float(i.state_income_tax or 0),
+        "state_disability_insurance": float(getattr(i, 'state_disability_insurance', 0)),
         "social_security_tax": float(i.social_security_tax or 0),
         "medicare_tax": float(i.medicare_tax or 0),
     }

@@ -11,7 +11,7 @@ from routes import (auth, employees, payroll, paystubs, time, company, reports, 
     offer_letters, w2, journal, garnishments, health as health_routes, scheduler, documents,
     self_service, benefits, direct_deposit, salary_bands, contractors, leave, openapi_export,
     performance, expenses, compliance, notifications, org_chart, adjustments,
-    ats, custom_fields, reconciliation)
+    ats, custom_fields, reconciliation, quickbooks, qbxpress)
 import os
 
 app = FastAPI(
@@ -72,6 +72,8 @@ app.include_router(adjustments.router)
 app.include_router(ats.router)
 app.include_router(custom_fields.router)
 app.include_router(reconciliation.router)
+app.include_router(quickbooks.router)
+app.include_router(qbxpress.router)
 
 os.makedirs(settings.PAYSTUB_DIR, exist_ok=True)
 
